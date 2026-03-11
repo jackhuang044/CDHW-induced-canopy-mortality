@@ -1,0 +1,85 @@
+rm(list = ls())
+
+library(caret)
+library(xgboost)
+library(dplyr)
+library(ggplot2)
+library(devEMF)
+
+# 1. Load data and convert variables to factors
+data <- read.csv('CDHWs_sample.csv')
+data$Origin    <- as.factor(data$Origin)
+data$Type      <- as.factor(data$Type)
+data$mortality <- as.factor(data$mortality)
+
+# 2. Split data into training and testing sets
+idx       <- createDataPartition(data$mortality, p = 0.8, list = FALSE)
+trainData <- data[idx, ]
+testData  <- data[-idx, ]
+
+# 3. Convert target variable to 0/1 numeric labels, then to factor for caret
+trainData$mortality <- ifelse(as.integer(trainData$mortality) == 1, 0, 1)
+testData$mortality  <- ifelse(as.integer(testData$mortality)  == 1, 0, 1)
+
+train_y <- factor(trainData$mortality, levels = c(0,1), labels = c("neg","pos"))
+test_y  <- factor(testData$mortality,  levels = c(0,1), labels = c("neg","pos"))
+
+# 4. Apply one-hot encoding; keep continuous features unchanged
+feature_cols <- setdiff(names(trainData), "mortality")
+dmy          <- dummyVars(~ ., data = trainData[, feature_cols])
+train_x      <- predict(dmy, newdata = trainData) %>% as.matrix()
+test_x       <- predict(dmy, newdata = testData)  %>% as.matrix()
+
+# 5. Set up caret CV control and hyperparameter grid
+ctrl <- trainControl(
+  method           = "cv",
+  number           = 10,
+  classProbs       = TRUE,
+  summaryFunction  = twoClassSummary,
+  verboseIter      = FALSE,
+  sampling         = "down"
+)
+
+tune_grid <- expand.grid(
+  nrounds            = c(120),
+  max_depth          = c(4),
+  eta                = c(0.05),
+  gamma              = c(3),
+  colsample_bytree   = c(0.2),
+  min_child_weight   = c(5),
+  subsample          = c(1.0)
+)
+
+# 6. Train the model using caret
+xgb_tuned <- train(
+  x                = train_x,
+  y                = train_y,
+  method           = "xgbTree",
+  trControl        = ctrl,
+  tuneGrid         = tune_grid,
+  metric           = "ROC",
+  verbose          = FALSE
+)
+
+# View best parameters
+print(xgb_tuned$bestTune)
+print(xgb_tuned)
+
+# 7. Predict and evaluate the model
+pred_prob  <- predict(xgb_tuned, test_x, type = "prob")[, "pos"]
+pred_class <- predict(xgb_tuned, test_x)
+
+conf_mat <- confusionMatrix(pred_class, test_y, positive = "pos")
+print(conf_mat)
+
+# 8. Feature importance
+imp <- varImp(xgb_tuned, scale = FALSE)
+print(imp)
+
+# 9. Calculate model performance metrics
+oa    <- conf_mat$overall['Accuracy']    # Overall Accuracy
+kappa <- conf_mat$overall['Kappa']       # Kappa Coefficient
+sens  <- conf_mat$byClass['Sensitivity'] # Sensitivity (Recall)
+spec  <- conf_mat$byClass['Specificity'] # Specificity
+prec  <- conf_mat$byClass['Precision']   # Precision
+f1    <- conf_mat$byClass['F1']          # F1 Score

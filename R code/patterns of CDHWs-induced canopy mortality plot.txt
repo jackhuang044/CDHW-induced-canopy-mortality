@@ -1,0 +1,41 @@
+rm(list = ls())
+
+library(terra)
+library(export)
+library(ggplot2)
+
+data <- read.csv('patterns of CDHWs-induced canopy mortality.csv')
+
+kk <- ggplot(data) +
+  geom_bar(aes(x = year, y = area_hm3),
+           stat="identity", 
+           width = 0.75,
+           fill="#FEBF41", 
+           colour="#F89623") +
+  labs(title = '',
+       x = "",
+       y = "")+
+  scale_y_continuous(limits = c(0,40), 
+                     breaks = seq(0,35,5), 
+                     expand = c(0,0), 
+                     sec.axis=sec_axis(~.*1/35, 
+                                       name = "", 
+                                       breaks = seq(0,1,0.25),
+                                       labels = scales::percent)) +
+  scale_x_continuous(limits = c(2000,2024), 
+                     breaks = seq(2000,2024,5), 
+                     expand = c(0.01,0)) +
+  geom_point(data = data,
+             aes(x = year, y = 35*cumulative_percentage),
+             size = 3,
+             shape = 17,
+             color = "#FF2A00",)+
+  geom_line(aes(x = year, y = 35*cumulative_percentage),
+            size = 1.25,
+            color = "#FF2A00",cex=0.5) +
+  theme_test(base_size = 32) +
+  theme(legend.position = 'none',
+        panel.border = element_rect(size=2,fill = 'transparent'),
+        axis.text = element_text(color='black'),
+        plot.title = element_text(size=20,hjust=0.5))
+kk

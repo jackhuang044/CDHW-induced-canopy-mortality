@@ -1,0 +1,38 @@
+rm(list = ls())
+library(ggplot2)
+library(export)
+library(devEMF)
+
+# Load data
+df <- read.csv('CDHWs_sts.csv')
+
+# Calculate linear regression
+lm_model <- lm(area_hm3 ~ year, data = df)
+
+# Extract regression coefficients and R-squared for potential plot labeling
+slope     <- coef(lm_model)[2]
+intercept <- coef(lm_model)[1]
+r_squared <- summary(lm_model)$r.squared
+
+# Generate the plot
+p <- ggplot(df, aes(x = year, y = area_hm3)) +
+  geom_col(color = "#F89623", alpha = 0.9, fill = "#FEBF41") +
+  geom_smooth(method = "lm", 
+              se = TRUE, 
+              color = "red",
+              fill = "#F69FA7") +
+  labs(x = "", y = "", title = "") +
+  expand_limits(y = 0) +
+  coord_cartesian(ylim = c(0, 400), expand = FALSE) +
+  theme_test(base_size = 30) +
+  theme(
+    legend.position = 'top',
+    panel.border = element_rect(linewidth = 2, fill = 'transparent'),
+    plot.title = element_text(size = 20, hjust = 0.5),
+    axis.text.x = element_blank(),  # Remove x-axis labels
+    axis.text.y = element_blank(),  # Remove y-axis labels
+    axis.ticks = element_line(color = "black", linewidth = 1),
+    axis.ticks.length = unit(0.2, "cm")
+  )
+
+plot(p)

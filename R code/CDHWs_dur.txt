@@ -1,0 +1,39 @@
+rm(list = ls())
+library(ggplot2)
+library(export)
+library(devEMF)
+
+# Load dataset
+df <- read.csv('CDHWs_sts.csv')
+
+# Calculate linear regression
+lm_model <- lm(dur ~ year, data = df)
+summary(lm_model)
+
+# Extract regression coefficients and R-squared
+intercept <- coef(lm_model)[1]
+slope     <- coef(lm_model)[2]
+r_squared <- summary(lm_model)$r.squared
+
+# Generate plot
+p <- ggplot(df, aes(x = year, y = dur)) +
+  geom_line(color = "#F89623", alpha = 0.9, linewidth = 1.2) +
+  geom_smooth(method = "lm", 
+              se = TRUE, 
+              color = "red",
+              fill = "#F69FA7") +
+  labs(x = "", y = "", title = "") +
+  expand_limits(y = 0) +
+  coord_cartesian(ylim = c(0, 12), expand = FALSE) +
+  theme_test(base_size = 30) +
+  theme(
+    legend.position = 'top',
+    panel.border = element_rect(linewidth = 2, fill = 'transparent'),
+    plot.title = element_text(size = 20, hjust = 0.5),
+    axis.text.x = element_blank(),  # Remove x-axis tick labels
+    axis.text.y = element_blank(),  # Remove y-axis tick labels
+    axis.ticks = element_line(color = "black", linewidth = 1),  # Ensure ticks are visible
+    axis.ticks.length = unit(0.2, "cm")  # Set tick length
+  )
+
+plot(p)

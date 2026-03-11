@@ -1,0 +1,59 @@
+rm(list = ls())
+
+library(ggplot2)
+library(devEMF)
+library(export)
+
+df <- read.csv('ac_classification.csv')
+lm_model <- lm(OB ~ 0 + XGBOOST, data = df)
+slope <- coef(lm_model)[1]
+R2 <- summary(lm_model)$r.squared
+rmse <- sqrt(mean((df$XGBOOST - df$OB)^2))
+
+p <- ggplot(df, aes(x = OB, y = XGBOOST, color = Group, shape = Group)) +
+  geom_point(size = 7, alpha = 0.85, stroke = 2.5) +  
+  geom_abline(intercept = 0, slope = 1, 
+              linetype = "dashed", color = "black", linewidth = 0.8) +
+  geom_abline(intercept = 0, slope = 1/slope, 
+              color = "#1F78B4", linewidth = 1) +
+  theme_minimal(base_size = 15) +
+  labs(
+    title = "",
+    x = "",
+    y = "",
+    color = "",
+    shape = ""
+  ) +
+  scale_color_manual(values = c("GF-1" = "#DD4949", 
+                                "sen"     = "#E6C240", 
+                                "UAV"      = "#4DAF4A",
+                                "file"    = "#984EA3")) +
+  scale_shape_manual(values = c("GF-1" = 21, 
+                                "sen"     = 22,
+                                "UAV"      = 23,
+                                "file"    = 24)) +
+  scale_y_continuous(limits = c(0,3.5), 
+                     breaks = seq(0,3,1),
+                     expand = c(0.02,0))+
+  scale_x_continuous(limits = c(0,3.5), 
+                     breaks = seq(0,3,1),
+                     expand = c(0.02,0))+
+  theme(
+    legend.position = "right",
+    legend.title = element_text(size = 25, face = "bold"),
+    legend.text = element_text(size = 25),
+    plot.title = element_text(size = 25, face = "bold", hjust = 0.5)
+  )+
+  theme_test(base_size = 50) +
+  theme(legend.position = 'none',
+        panel.border = element_rect(size=2,fill = 'transparent'),
+        axis.text = element_text(color='black'),
+        plot.title = element_text(size=25,hjust=0.5)) +
+  annotate("text",
+           x = 0.01, y = max(df$XGBOOST, na.rm = TRUE) * 0.95,
+           label = paste0("R² = ", round(R2, 3),
+                          "\nRMSE = ", round(rmse, 3),
+                          "\nOB = ", round(slope, 2), " × XGBOOST"),
+           hjust = 0, vjust = 1, size = 5.2)
+
+print(p)

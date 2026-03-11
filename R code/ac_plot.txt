@@ -1,0 +1,79 @@
+rm(list = ls())
+library(ggplot2)
+library(hexbin)
+library(devEMF)
+
+# Load and prepare data
+df <- read.csv("ac_data.csv")
+df <- data.frame(
+  Predictions = df$vct_ac,
+  Actual      = df$ac
+)
+df <- na.omit(df)
+
+# Perform linear regression through the origin (y = kx)
+fit       <- lm(Actual ~ Predictions + 0, data = df)
+k         <- coef(fit)[["Predictions"]]
+y_pred    <- predict(fit)
+
+# Calculate model performance metrics
+r_squared <- 1 - sum((df$Actual - y_pred)^2) / sum((df$Actual - mean(df$Actual))^2)
+rmse      <- sqrt(mean((df$Actual - y_pred)^2)) * 100
+
+# Create the hexbin plot
+p <- ggplot(df, aes(x = Predictions, y = Actual)) +
+  geom_hex(
+    bins = 25,
+    aes(fill = after_stat(count)),
+    color = "white", linewidth = 0.1
+  ) +
+  geom_abline(
+    slope = k, intercept = 0,
+    color = "red3", linewidth = 1
+  ) + # Fitted line y = kx
+  geom_abline(
+    slope = 1, intercept = 0,
+    color = "black", linewidth = 1, linetype = "dashed"
+  ) + # 1:1 reference line
+  scale_fill_gradientn(
+    colours = c("#F0E442", "#009E73", "#D55E00"),
+    trans   = "log10",
+    name    = "",
+    breaks  = c(1, 10, 50, 100, 200),
+    guide   = guide_colorbar(
+      barheight = unit(10, "cm"),
+      barwidth  = unit(1, "cm")
+    )
+  ) +
+  scale_x_continuous(
+    limits = c(0, 0.25),
+    breaks = seq(0, 0.25, by = 0.05),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  scale_y_continuous(
+    limits = c(0, 0.25),
+    breaks = seq(0, 0.25, by = 0.05),
+    expand = expansion(mult = c(0, 0.05))
+  ) +
+  coord_fixed(ratio = 1) +
+  labs(
+    title = "Cross Validation: AC vs VCT_AC",
+    x     = expression("Predicted AC (vct_ac)"),
+    y     = expression("Observed AC (ac)")
+  ) +
+  theme_classic(base_size = 11) +
+  theme(
+    panel.border = element_rect(linewidth = 2, fill = 'transparent'),
+    plot.title   = element_text(size = 12, face = "bold", hjust = 0.5, margin = margin(b = 10)),
+    legend.position = 'right'
+  ) +
+  annotate("text",
+           x = 0.18, y = 0.05,
+           label = sprintf(
+             "y = %.2fx\nR² = %.2f\nRMSE = %.2f",
+             k, r_squared, rmse
+           ),
+           hjust = 0, size = 3.5, fontface = "italic"
+  )
+
+plot(p)

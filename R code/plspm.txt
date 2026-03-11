@@ -1,0 +1,102 @@
+rm(list = ls())
+
+library(ggplot2)
+library(dplyr)
+library(export)
+library(plspm)
+library(sf)
+library(terra)
+library(caret)   
+library(car)
+
+# Load data
+df <- read.csv('plspm_data.csv')
+df$Mortality  <- as.numeric(as.factor(df$Mortality))
+
+# Define the path matrix (Structural model)
+# Rows/Columns correspond to: Topography, Climate, CDHWs, Forest, WaterStatus, Mortality
+path_matrix <- rbind(
+  Topography  = c(0, 0, 0, 0, 0, 0),
+  Climate     = c(1, 0, 0, 0, 0, 0),
+  CDHWs       = c(0, 1, 0, 0, 0, 0),   # CDHWs influenced by Climate only
+  Forest      = c(1, 1, 1, 0, 0, 0),   # Influenced by Topography, Climate, CDHWs
+  WaterStatus = c(1, 1, 1, 1, 0, 0),   # Influenced by Topography, Climate, CDHWs, Forest
+  Mortality   = c(1, 1, 1, 1, 1, 0)    # Influenced by all factors
+)
+
+colnames(path_matrix) <- rownames(path_matrix)
+
+# Define measurement blocks (Outer model)
+blocks <- list(
+  Topography  = c("DEM", "Slope", "Aspect"),
+  Climate     = c("SPEI", "PR", "VPD", "VPD_VAP"),
+  CDHWs       = c("CDHWs"),
+  Forest      = c("Age", "Height"),
+  WaterStatus = c("SMs", "SMrz", "Cpi"),
+  Mortality   = c("Mortality")
+)
+
+# Define measurement modes (A = Reflective, B = Formative)
+modes <- c("A", "A", "A", "A", "A", "B")
+
+# Data preprocessing: subset and check for zero variance
+all_vars <- unique(unlist(blocks))
+df_sub   <- df[, all_vars]
+
+var_check <- apply(df_sub, 2, var, na.rm = TRUE)
+df_sub    <- df_sub[, var_check > 0]
+
+# Check for high multicollinearity
+cor_mat   <- cor(df_sub, use = "pairwise.complete.obs")
+high_cor  <- findCorrelation(cor_mat, cutoff = 0.8)
+names(df_sub)[high_cor]
+
+# Standardize variables
+df_sub <- as.data.frame(scale(df_sub))
+names(df_sub) <- c('DEM', 'Slope', 'Aspect', 'SPEI', 'PR', 'VPD', 
+                   'VPD_VAP', 'CDHWs', 'Age', 'Height', 'SMs', 'SMrz',
+                   'Cpi', 'Mortality')
+
+# Execute PLS-PM analysis
+pls_model <- plspm(
+  df_sub,
+  path_matrix,
+  blocks,
+  modes,
+  boot.val = TRUE,
+  br = 10   
+)
+
+# Output results
+print(pls_model$outer_model)
+print(pls_model$path_coefs)
+print(pls_model$gof)
+print(pls_model$inner_model)
+
+# Calculate path significance
+path <- pls_model$boot$paths %>%  
+  as.data.frame() %>%  
+  mutate(t = abs(Original / Std.Error))
+
+plot(pls_model)
+
+# Summarize bootstrap path results
+boot_paths <- as.data.frame(pls_model$boot$paths)
+boot_paths <- boot_paths %>%
+  mutate(
+    t_value = Original / Std.Error
+  )
+
+# Add significance levels
+boot_paths <- boot_paths %>%
+  mutate(
+    sig = case_when(
+      perc.025 * perc.975 > 0 & abs(t_value) > 10 ~ "***",
+      perc.025 * perc.975 > 0 & abs(t_value) > 5  ~ "**",
+      perc.025 * perc.975 > 0 & abs(t_value) > 2  ~ "*",
+      TRUE ~ "ns"
+    )
+  )
+
+final_table <- boot_paths %>%
+  print()

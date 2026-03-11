@@ -1,0 +1,43 @@
+rm(list = ls())
+
+library(ggplot2)
+library(dplyr)
+library(export)
+library(rstatix)
+library(ggplot2)
+library(dplyr)
+library(multcompView)
+library(emmeans)
+library(multcomp)
+library(plotrix)
+
+forest_data <- read.csv('lag_data.csv')
+forest_data$Lag_Effect <- ifelse(forest_data$Lag_Effect>=1 &forest_data$Lag_Effect<3, 1,forest_data$Lag_Effect)
+forest_data$Lag_Effect <- ifelse(forest_data$Lag_Effect>=3 &forest_data$Lag_Effect<6, 4,forest_data$Lag_Effect)
+forest_data$Lag_Effect <- ifelse(forest_data$Lag_Effect>=6 &forest_data$Lag_Effect<9, 7,forest_data$Lag_Effect)
+forest_data$Lag_Effect <- ifelse(forest_data$Lag_Effect>=9 &forest_data$Lag_Effect<=12, 10,forest_data$Lag_Effect)
+
+group_stats <- forest_data %>%
+  group_by(Lag_Effect) %>%
+  summarise(
+    n = n())
+
+
+categories <- group_stats$Lag_Effect
+values <- group_stats$n
+sum_values <- sum(values)
+percentages <- round(values/sum_values * 100, 1)
+
+colors <- c("#BFBFBF", "#FDDBC7", "#F4A582", "#D6604D", "#B31B2D")
+normalized_start <- 4 %% (2*pi)
+pie3D(values,  
+      labels = paste0(categories, " (", percentages, "%)"),  
+      explode = 1e-10,
+      radius = 1,
+      col = colors,
+      main = "",
+      labelcex = 0.8,
+      shade = pi/6,
+      start  = 2.4,
+      theta = 1
+)

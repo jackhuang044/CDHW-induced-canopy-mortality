@@ -1,0 +1,159 @@
+rm(list = ls())
+
+library(ggplot2)
+library(dplyr)
+library(export)
+library(rstatix)
+library(multcompView)
+library(emmeans)
+library(multcomp)
+library(dplyr)
+
+forest_data <- read.csv('Type_lag_data.csv')
+
+
+group_stats <- forest_data %>%
+  group_by(Stand_Origin, Forest_Type) %>%
+  summarise(q1 = quantile(Lag_Effect, 0.25),
+            q3 = quantile(Lag_Effect, 0.75),
+            iqr = q3 - q1,
+            lower = q1 - 1.5 * (q3 - q1),
+            upper = q3 + 1.5 * (q3 - q1),
+            n = n(),
+            m = mean(Lag_Effect, na.rm = TRUE),        # Mean
+            sd_val = sd(Lag_Effect, na.rm = TRUE),    # Standard Deviation
+            .groups = "drop")
+
+
+forest_data$Stand_Origin <- as.factor(forest_data$Stand_Origin)
+forest_data$Forest_Type  <- as.factor(forest_data$Forest_Type)
+
+# 2. 双因素方差分析（含交互项）
+model <- aov(Lag_Effect ~ Forest_Type * Stand_Origin, 
+             data = forest_data)
+summary(model)
+
+# 3. Tukey HSD
+emm <- emmeans(model, ~ Forest_Type * Stand_Origin, level = 0.999) #  0.999
+pairs <- contrast(emm, method = "pairwise", adjust = "tukey")
+print(pairs)
+
+# 4. 提取显著性分组字母
+cld_results <- cld(emm, Letters = letters, adjust = "tukey", reversed = T, level = 0.999) # 0.999
+print(cld_results)
+
+
+
+# ###############################################################################
+
+group_stats <- forest_data %>%
+  group_by(Stand_Origin, Forest_Type) %>%
+  summarise(
+    n = n(),
+    q1 = quantile(Lag_Effect, 0.25),
+    q3 = quantile(Lag_Effect, 0.75),
+    iqr = q3 - q1,
+    lower = q1 - 1.5 * (q3 - q1),
+    upper = q3 + 1.5 * (q3 - q1),
+    m = mean(Lag_Effect, na.rm = TRUE),
+    sd_val = sd(Lag_Effect, na.rm = TRUE),
+    se_val = sd_val / sqrt(n),
+    df = n - 1, 
+    t_star = qt(1 - 0.001 / 2, df = df),
+    ci_lower = m - t_star * se_val,
+    ci_upper = m + t_star * se_val,
+    .groups = "drop"
+  )
+
+
+forest_with_bounds <- forest_data %>%
+  left_join(group_stats, by = c("Stand_Origin", "Forest_Type"))
+
+outliers <- forest_with_bounds %>%
+  filter(Lag_Effect < lower | Lag_Effect > upper)
+outliers <- outliers[, c('Stand_Origin' , 'Lag_Effect' , 'Forest_Type')]
+
+
+
+chosen_colors <- c("#7B6888", "#6AB0D6")
+
+
+levels_so <- levels(forest_data$Stand_Origin)
+if (length(chosen_colors) < length(levels_so)) {
+  chosen_colors <- rep(chosen_colors, length.out = length(levels_so))
+}
+names(chosen_colors) <- levels_so
+
+
+# ================== 绘图参数 ==================
+pos_dodge <- position_dodge(width = 0.8)                       
+pos_jitterdodge <- position_jitterdodge(jitter.width = 0.16, dodge.width = 0.8) 
+y_max <- max(forest_data$Lag_Effect, na.rm = TRUE)
+y_limit_top <- y_max + 2   
+pos_jitterdodge <- position_jitterdodge(
+  jitter.width = 0.2,    
+  jitter.height = 0,     
+  dodge.width = 0.8
+)
+
+forest_data$Forest_Type <- factor(forest_data$Forest_Type,
+                                  levels = c("2", "1", "5", "4"))
+p_box <- ggplot(forest_data,
+                aes(x = Forest_Type,
+                    y = Lag_Effect,
+                    color = Stand_Origin,
+                    group = interaction(Forest_Type, Stand_Origin))) +
+  stat_boxplot(geom = "errorbar",
+               width = 0.35,
+               size = 0.9,
+               position = pos_dodge) +
+  geom_boxplot(fill = NA,
+               width = 0.4,
+               size = 1,
+               position = pos_dodge,
+               outlier.shape = NA) +
+  stat_summary(fun = median,
+               geom = "crossbar",
+               width = 0.45,
+               fatten = 0,
+               size = 1.1,
+               position = pos_dodge,
+               aes(color = Stand_Origin)) +
+  stat_summary(fun = mean,
+               geom = "point",
+               shape = 23,               
+               size = 4,                 
+               fill = "white",           
+               stroke = 1.2,             
+               alpha = 0.9,              
+               position = pos_dodge) +
+  geom_point(data = outliers,
+             aes(x = Forest_Type, y = Lag_Effect, color = Stand_Origin,
+                 group = interaction(Forest_Type, Stand_Origin)),
+             position = pos_jitterdodge,
+             size = 2.2,
+             alpha = 0.9,
+             shape = 16,
+             show.legend = TRUE) +
+  scale_color_manual(values = chosen_colors,
+                     name = "Stand_Origin",
+                     labels = setNames(levels_so, levels_so)) +
+  scale_y_continuous(limits = c(0, 14),
+                     breaks = seq(0, 13, by = 2),
+                     expand = expansion(mult = c(0.05, 0))) +
+  scale_x_discrete(name = "Forest_Type") +
+  
+  theme_minimal(base_size = 13) +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    plot.subtitle = element_text(hjust = 0.5)
+  ) +
+  theme_test(base_size = 28) +
+  theme(
+    legend.position = 'right',
+    panel.border = element_rect(size = 2, fill = 'transparent'),
+    axis.text = element_text(color = 'black'),
+    plot.title = element_text(size = 20, hjust = 0.5)
+  )
+print(p_box)
